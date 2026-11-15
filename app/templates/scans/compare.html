@@ -1,0 +1,149 @@
+{% extends 'base.html' %}
+{% block title %}Compare Scans{% endblock %}
+{% block breadcrumb %}Scans / Compare{% endblock %}
+
+{% block content %}
+<div class="sf-page-header">
+  <h1 class="sf-page-title"><i class="fa-solid fa-code-compare me-2 text-primary"></i>Compare Scans</h1>
+</div>
+
+<div class="sf-card mb-4">
+  <div class="sf-card-body">
+    <form method="POST" action="{{ url_for('scans.compare') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-5">
+          <label class="form-label fw-semibold">Baseline Scan (Before)</label>
+          <select name="baseline_id" class="form-select sf-select" required>
+            <option value="">Select baseline scan…</option>
+            {% for s in all_scans %}
+            <option value="{{ s.id }}" {% if baseline and baseline.id == s.id %}selected{% endif %}>
+              #{{ s.id }} – {{ s.repository.name if s.repository else 'Unknown' }}
+              ({{ s.created_at.strftime('%b %d %H:%M') if s.created_at else '?' }},
+              Score: {{ s.security_score or '?' }})
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-1 text-center">
+          <i class="fa-solid fa-arrow-right text-muted fa-lg"></i>
+        </div>
+        <div class="col-md-5">
+          <label class="form-label fw-semibold">Target Scan (After)</label>
+          <select name="target_id" class="form-select sf-select" required>
+            <option value="">Select target scan…</option>
+            {% for s in all_scans %}
+            <option value="{{ s.id }}" {% if target and target.id == s.id %}selected{% endif %}>
+              #{{ s.id }} – {{ s.repository.name if s.repository else 'Unknown' }}
+              ({{ s.created_at.strftime('%b %d %H:%M') if s.created_at else '?' }},
+              Score: {{ s.security_score or '?' }})
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-1">
+          <button type="submit" class="btn sf-btn-primary w-100">
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if comparison %}
+<div class="row g-3 mb-4">
+  <!-- Score Delta -->
+  <div class="col-md-3">
+    <div class="sf-card text-center p-3 h-100">
+      <div class="text-muted small mb-1">Score Change</div>
+      <div class="fs-1 fw-bold {% if comparison.score_delta > 0 %}text-success{% elif comparison.score_delta < 0 %}text-danger{% else %}text-muted{% endif %}">
+        {% if comparison.score_delta > 0 %}+{% endif %}{{ comparison.score_delta }}
+      </div>
+      <div class="text-muted small">
+        {{ baseline.security_score or '?' }} → {{ target.security_score or '?' }}
+      </div>
+      <div class="mt-2">
+        <span class="badge {% if comparison.improved %}bg-success{% else %}bg-danger{% endif %}">
+          {% if comparison.improved %}📈 Improved{% else %}📉 Worsened{% endif %}
+        </span>
+      </div>
+    </div>
+  </div>
+  <!-- Vuln Delta -->
+  <div class="col-md-3">
+    <div class="sf-card text-center p-3 h-100">
+      <div class="text-muted small mb-1">Vuln Change</div>
+      <div class="fs-1 fw-bold {% if comparison.vuln_delta < 0 %}text-success{% elif comparison.vuln_delta > 0 %}text-danger{% else %}text-muted{% endif %}">
+        {% if comparison.vuln_delta > 0 %}+{% endif %}{{ comparison.vuln_delta }}
+      </div>
+      <div class="text-muted small">Total vulnerabilities</div>
+    </div>
+  </div>
+  <!-- Critical Delta -->
+  <div class="col-md-3">
+    <div class="sf-card text-center p-3 h-100">
+      <div class="text-muted small mb-1">Critical Change</div>
+      <div class="fs-1 fw-bold text-danger">
+        {% if comparison.critical_delta > 0 %}+{% endif %}{{ comparison.critical_delta }}
+      </div>
+      <div class="text-muted small">Critical findings</div>
+    </div>
+  </div>
+  <!-- High Delta -->
+  <div class="col-md-3">
+    <div class="sf-card text-center p-3 h-100">
+      <div class="text-muted small mb-1">High Change</div>
+      <div class="fs-1 fw-bold text-warning">
+        {% if comparison.high_delta > 0 %}+{% endif %}{{ comparison.high_delta }}
+      </div>
+      <div class="text-muted small">High findings</div>
+    </div>
+  </div>
+</div>
+
+<!-- Side-by-side comparison -->
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="sf-card">
+      <div class="sf-card-header" style="border-left: 3px solid var(--sf-danger)">
+        <span>📊 Baseline — Scan #{{ baseline.id }}</span>
+      </div>
+      <div class="sf-card-body">
+        <div class="sf-compare-row"><span>Score</span><strong>{{ baseline.security_score or '—' }}/100</strong></div>
+        <div class="sf-compare-row"><span>Critical</span><span class="text-danger fw-bold">{{ baseline.critical_count }}</span></div>
+        <div class="sf-compare-row"><span>High</span><span class="text-warning">{{ baseline.high_count }}</span></div>
+        <div class="sf-compare-row"><span>Medium</span><span class="text-info">{{ baseline.medium_count }}</span></div>
+        <div class="sf-compare-row"><span>Low</span><span class="text-secondary">{{ baseline.low_count }}</span></div>
+        <div class="sf-compare-row"><span>Gate</span>
+          <span class="badge {% if baseline.gate_decision == 'passed' %}bg-success{% else %}bg-danger{% endif %}">
+            {{ baseline.gate_decision or '—' }}
+          </span>
+        </div>
+        <a href="{{ url_for('scans.detail', scan_id=baseline.id) }}" class="btn btn-sm btn-outline-secondary w-100 mt-2">View Full Scan</a>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="sf-card">
+      <div class="sf-card-header" style="border-left: 3px solid var(--sf-success)">
+        <span>📊 Target — Scan #{{ target.id }}</span>
+      </div>
+      <div class="sf-card-body">
+        <div class="sf-compare-row"><span>Score</span><strong>{{ target.security_score or '—' }}/100</strong></div>
+        <div class="sf-compare-row"><span>Critical</span><span class="text-danger fw-bold">{{ target.critical_count }}</span></div>
+        <div class="sf-compare-row"><span>High</span><span class="text-warning">{{ target.high_count }}</span></div>
+        <div class="sf-compare-row"><span>Medium</span><span class="text-info">{{ target.medium_count }}</span></div>
+        <div class="sf-compare-row"><span>Low</span><span class="text-secondary">{{ target.low_count }}</span></div>
+        <div class="sf-compare-row"><span>Gate</span>
+          <span class="badge {% if target.gate_decision == 'passed' %}bg-success{% else %}bg-danger{% endif %}">
+            {{ target.gate_decision or '—' }}
+          </span>
+        </div>
+        <a href="{{ url_for('scans.detail', scan_id=target.id) }}" class="btn btn-sm btn-outline-secondary w-100 mt-2">View Full Scan</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

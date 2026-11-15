@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% block title %}Security Policies{% endblock %}
+{% block breadcrumb %}Security Policies{% endblock %}
+
+{% block content %}
+<div class="sf-page-header">
+  <div>
+    <h1 class="sf-page-title"><i class="fa-solid fa-sliders me-2 text-primary"></i>Security Policies</h1>
+    <p class="sf-page-subtitle">Configure deployment gate rules and thresholds</p>
+  </div>
+</div>
+
+<div class="sf-info-box mb-4">
+  <i class="fa-solid fa-circle-info text-info me-2"></i>
+  <div>
+    <strong>How Security Gate Works:</strong> When a scan completes, SecureFlow evaluates findings against
+    these policies. <strong>Block</strong> policies prevent deployment. <strong>Warn</strong> policies log warnings.
+    Adjust thresholds to control sensitivity.
+  </div>
+</div>
+
+<div class="row g-3">
+  {% for policy in policies %}
+  <div class="col-md-6">
+    <div class="sf-card sf-policy-card">
+      <div class="sf-card-header">
+        <div>
+          <span class="fw-semibold">{{ policy.name.replace('_', ' ').title() }}</span>
+          {% if not policy.enabled %}<span class="badge bg-secondary ms-2">Disabled</span>{% endif %}
+        </div>
+        <span class="sf-severity-badge sf-sev-{{ policy.severity if policy.severity != 'secret' else 'critical' }}">
+          {{ policy.severity }}
+        </span>
+      </div>
+      <div class="sf-card-body">
+        <p class="text-muted small mb-3">{{ policy.description }}</p>
+        <form method="POST" action="{{ url_for('policies.update', policy_id=policy.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="row g-2 align-items-center mb-3">
+            <div class="col-5">
+              <label class="form-label small text-muted mb-1">Action</label>
+              <select name="action" class="form-select form-select-sm sf-select">
+                <option value="block" {% if policy.action == 'block' %}selected{% endif %}>🚫 Block</option>
+                <option value="warn" {% if policy.action == 'warn' %}selected{% endif %}>⚠️ Warn</option>
+                <option value="allow" {% if policy.action == 'allow' %}selected{% endif %}>✅ Allow</option>
+              </select>
+            </div>
+            <div class="col-4">
+              <label class="form-label small text-muted mb-1">Threshold</label>
+              <input type="number" name="threshold" class="form-control form-control-sm sf-input"
+                     value="{{ policy.threshold }}" min="1" max="100">
+            </div>
+            <div class="col-3">
+              <label class="form-label small text-muted mb-1">Enabled</label>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="enabled"
+                       {% if policy.enabled %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-sm sf-btn-primary w-100">
+            <i class="fa-solid fa-save me-1"></i>Save Policy
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

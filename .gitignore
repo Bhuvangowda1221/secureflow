@@ -1,0 +1,60 @@
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# ─── Virtual Environment ──────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ─── Flask Instance ───────────────────────────────────────────────────────────
+instance/
+*.db
+*.sqlite
+*.sqlite3
+
+# ─── Environment Variables (NEVER commit) ────────────────────────────────────
+.env
+*.env.local
+*.env.production
+
+# ─── Scan Artifacts ───────────────────────────────────────────────────────────
+scan_workspace/
+reports/*.pdf
+reports/*.json
+reports/*.csv
+
+# ─── IDE ──────────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ─── Testing ──────────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.cover
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ─── Gitleaks / Trivy Reports ─────────────────────────────────────────────────
+gitleaks-report.json
+trivy-report.json
+bandit-report.json
+pip-audit-report.json
+sonar-report.json

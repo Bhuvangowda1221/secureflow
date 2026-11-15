@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% block title %}Admin Panel{% endblock %}
+{% block breadcrumb %}Admin Panel{% endblock %}
+
+{% block content %}
+<div class="sf-page-header">
+  <h1 class="sf-page-title"><i class="fa-solid fa-users-gear me-2 text-danger"></i>Admin Panel</h1>
+</div>
+
+<!-- System Stats -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="sf-stat-card sf-stat-blue">
+      <div class="sf-stat-icon"><i class="fa-solid fa-users"></i></div>
+      <div class="sf-stat-value">{{ users|length }}</div>
+      <div class="sf-stat-label">Total Users</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="sf-stat-card sf-stat-cyan">
+      <div class="sf-stat-icon"><i class="fa-brands fa-github"></i></div>
+      <div class="sf-stat-value">{{ total_repos }}</div>
+      <div class="sf-stat-label">Repositories</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="sf-stat-card sf-stat-purple">
+      <div class="sf-stat-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></div>
+      <div class="sf-stat-value">{{ total_scans }}</div>
+      <div class="sf-stat-label">Total Scans</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="sf-stat-card sf-stat-green">
+      <div class="sf-stat-icon"><i class="fa-solid fa-scroll"></i></div>
+      <div class="sf-stat-value">{{ audit_logs|length }}</div>
+      <div class="sf-stat-label">Audit Entries</div>
+    </div>
+  </div>
+</div>
+
+<!-- Users Table -->
+<div class="sf-card mb-4">
+  <div class="sf-card-header"><span><i class="fa-solid fa-users me-2"></i>User Management</span></div>
+  <div class="sf-card-body p-0">
+    <div class="table-responsive">
+      <table class="sf-table table mb-0">
+        <thead>
+          <tr><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th><th>Created</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+          <tr>
+            <td class="fw-semibold">{{ user.username }}</td>
+            <td><small class="text-muted">{{ user.email }}</small></td>
+            <td>
+              <span class="badge bg-{{ 'danger' if user.role == 'admin' else 'secondary' }}">{{ user.role }}</span>
+            </td>
+            <td>
+              <span class="badge bg-{{ 'success' if user.is_active else 'secondary' }}">
+                {{ 'Active' if user.is_active else 'Inactive' }}
+              </span>
+            </td>
+            <td><small class="text-muted">{{ user.last_login.strftime('%b %d %H:%M') if user.last_login else 'Never' }}</small></td>
+            <td><small class="text-muted">{{ user.created_at.strftime('%b %d, %Y') if user.created_at else '—' }}</small></td>
+            <td>
+              {% if user.id != current_user.id %}
+              <form method="POST" action="{{ url_for('admin.toggle_user', user_id=user.id) }}"
+                    style="display:inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-xs btn-outline-{{ 'danger' if user.is_active else 'success' }}"
+                        onclick="return confirm('{{ 'Deactivate' if user.is_active else 'Activate' }} {{ user.username }}?')">
+                  {{ 'Deactivate' if user.is_active else 'Activate' }}
+                </button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Audit Log -->
+<div class="sf-card">
+  <div class="sf-card-header"><span><i class="fa-solid fa-scroll me-2"></i>Recent Audit Log</span></div>
+  <div class="sf-card-body p-0">
+    <div class="table-responsive">
+      <table class="sf-table table mb-0">
+        <thead>
+          <tr><th>Timestamp</th><th>User</th><th>Action</th><th>Resource</th><th>IP</th></tr>
+        </thead>
+        <tbody>
+          {% for log in audit_logs %}
+          <tr>
+            <td><small class="text-muted font-monospace">{{ log.created_at.strftime('%b %d %H:%M:%S') if log.created_at else '—' }}</small></td>
+            <td><small>{{ log.user.username if log.user else 'System' }}</small></td>
+            <td><small>{{ log.action[:80] }}</small></td>
+            <td><small class="text-muted">{{ log.resource_type or '—' }}</small></td>
+            <td><small class="text-muted font-monospace">{{ log.ip_address or '—' }}</small></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

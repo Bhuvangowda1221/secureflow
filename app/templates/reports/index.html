@@ -1,0 +1,151 @@
+{% extends 'base.html' %}
+{% block title %}Reports{% endblock %}
+{% block breadcrumb %}Reports{% endblock %}
+
+{% block content %}
+<div class="sf-page-header">
+  <h1 class="sf-page-title"><i class="fa-solid fa-file-shield me-2 text-primary"></i>Security Reports</h1>
+</div>
+
+<!-- Generate Report Card -->
+<div class="sf-card mb-4">
+  <div class="sf-card-header">
+    <span><i class="fa-solid fa-plus me-2 text-primary"></i>Generate New Report</span>
+  </div>
+  <div class="sf-card-body">
+    <form method="POST" id="generateForm" onsubmit="return submitReport(event)">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Select Completed Scan</label>
+          <select name="scan_id" class="form-select sf-select" required id="scanSelect">
+            <option value="">Choose a completed scan…</option>
+            {% for scan in scans %}
+            <option value="{{ scan.id }}">
+              #{{ scan.id }} – {{ scan.repository.name if scan.repository else 'Unknown' }}
+              ({{ scan.created_at.strftime('%b %d %H:%M') if scan.created_at else '?' }},
+              Score: {{ scan.security_score or 'N/A' }}/100)
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">Report Format</label>
+          <div class="d-flex gap-3 mt-1">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="report_type" id="typePdf" value="pdf" checked>
+              <label class="form-check-label" for="typePdf">
+                <i class="fa-solid fa-file-pdf text-danger me-1"></i>PDF
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="report_type" id="typeJson" value="json">
+              <label class="form-check-label" for="typeJson">
+                <i class="fa-solid fa-file-code text-info me-1"></i>JSON
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="report_type" id="typeCsv" value="csv">
+              <label class="form-check-label" for="typeCsv">
+                <i class="fa-solid fa-file-csv text-success me-1"></i>CSV
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn sf-btn-primary w-100" id="generateBtn">
+            <i class="fa-solid fa-file-export me-2"></i>Generate
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Reports Table -->
+<div class="sf-card">
+  <div class="sf-card-header">
+    <span><i class="fa-solid fa-clock-rotate-left me-2"></i>Generated Reports ({{ reports|length }})</span>
+  </div>
+  <div class="sf-card-body p-0">
+    {% if reports %}
+    <div class="table-responsive">
+      <table class="sf-table table mb-0">
+        <thead>
+          <tr>
+            <th>Format</th><th>Scan</th><th>Repository</th>
+            <th>Generated At</th><th>Size</th><th>Download</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in reports %}
+          <tr>
+            <td>
+              {% if r.report_type == 'pdf' %}
+              <span class="badge bg-danger"><i class="fa-solid fa-file-pdf me-1"></i>PDF</span>
+              {% elif r.report_type == 'json' %}
+              <span class="badge bg-info"><i class="fa-solid fa-file-code me-1"></i>JSON</span>
+              {% else %}
+              <span class="badge bg-success"><i class="fa-solid fa-file-csv me-1"></i>CSV</span>
+              {% endif %}
+            </td>
+            <td>
+              <a href="{{ url_for('scans.detail', scan_id=r.scan_id) }}" class="text-primary">
+                Scan #{{ r.scan_id }}
+              </a>
+            </td>
+            <td>
+              <small class="text-muted">
+                {% if r.repository %}{{ r.repository.name.split('/')[-1] }}{% else %}—{% endif %}
+              </small>
+            </td>
+            <td><small>{{ r.created_at.strftime('%b %d, %Y %H:%M') if r.created_at else '—' }}</small></td>
+            <td>
+              <small class="text-muted">
+                {% if r.file_size_bytes %}
+                  {% if r.file_size_bytes > 1048576 %}
+                    {{ "%.1f"|format(r.file_size_bytes / 1048576) }} MB
+                  {% else %}
+                    {{ "%.1f"|format(r.file_size_bytes / 1024) }} KB
+                  {% endif %}
+                {% else %}—{% endif %}
+              </small>
+            </td>
+            <td>
+              <a href="{{ url_for('reports.download', report_id=r.id) }}"
+                 class="btn btn-sm btn-outline-primary">
+                <i class="fa-solid fa-download me-1"></i>Download
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="sf-empty-state py-5">
+      <i class="fa-solid fa-file-shield fa-3x text-muted mb-3"></i>
+      <h4>No reports generated yet</h4>
+      <p class="text-muted">Select a completed scan above and click Generate.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function submitReport(e) {
+  e.preventDefault();
+  const scanId = document.getElementById('scanSelect').value;
+  if (!scanId) {
+    alert('Please select a scan first.');
+    return false;
+  }
+  const form = document.getElementById('generateForm');
+  form.action = '/reports/generate/' + scanId;
+  form.submit();
+  return false;
+}
+</script>
+{% endblock %}

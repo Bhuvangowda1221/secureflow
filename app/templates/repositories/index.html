@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+{% block title %}Repositories{% endblock %}
+{% block breadcrumb %}Repositories{% endblock %}
+
+{% block content %}
+<div class="sf-page-header">
+  <div>
+    <h1 class="sf-page-title"><i class="fa-brands fa-github me-2 text-primary"></i>Repositories</h1>
+    <p class="sf-page-subtitle">{{ repos|length }} connected repositor{{ 'y' if repos|length == 1 else 'ies' }}</p>
+  </div>
+  <a href="{{ url_for('repositories.add') }}" class="btn sf-btn-primary">
+    <i class="fa-solid fa-plus me-2"></i>Connect Repository
+  </a>
+</div>
+
+{% if repos %}
+<div class="row g-3">
+  {% for repo in repos %}
+  <div class="col-md-6 col-xl-4">
+    <div class="sf-repo-card">
+      <div class="sf-repo-card-header">
+        <div class="sf-repo-card-title">
+          <i class="fa-brands fa-github me-2"></i>
+          <span class="sf-repo-name-text" title="{{ repo.name }}">{{ repo.name }}</span>
+        </div>
+        <div class="sf-health-dot sf-health-{{ repo.health_status }}" title="{{ repo.health_status }}"></div>
+      </div>
+
+      {% if repo.description %}
+      <p class="sf-repo-desc text-muted">{{ repo.description[:100] }}{% if repo.description|length > 100 %}…{% endif %}</p>
+      {% endif %}
+
+      <div class="sf-repo-meta">
+        {% if repo.language %}
+        <span class="sf-repo-tag"><i class="fa-solid fa-code me-1"></i>{{ repo.language }}</span>
+        {% endif %}
+        <span class="sf-repo-tag"><i class="fa-solid fa-code-branch me-1"></i>{{ repo.default_branch }}</span>
+        {% if repo.is_private %}
+        <span class="sf-repo-tag"><i class="fa-solid fa-lock me-1"></i>Private</span>
+        {% endif %}
+      </div>
+
+      <!-- Security Score Ring -->
+      <div class="sf-score-container">
+        {% if repo.security_score is not none %}
+        <div class="sf-score-ring {% if repo.security_score >= 75 %}ring-good{% elif repo.security_score >= 50 %}ring-fair{% else %}ring-bad{% endif %}"
+             data-score="{{ repo.security_score }}">
+          <div class="sf-score-inner">
+            <span class="sf-score-num">{{ repo.security_score }}</span>
+            <span class="sf-score-denom">/100</span>
+          </div>
+        </div>
+        {% else %}
+        <div class="sf-score-ring ring-unknown">
+          <div class="sf-score-inner">
+            <span class="sf-score-num text-muted">—</span>
+          </div>
+        </div>
+        {% endif %}
+        <div class="sf-score-info">
+          <div class="sf-score-label">Security Score</div>
+          <div class="sf-health-label badge bg-{{ repo.health_color }}">{{ repo.health_status }}</div>
+          {% if repo.last_scanned_at %}
+          <div class="text-muted small mt-1">Last scan: {{ repo.last_scanned_at.strftime('%b %d, %Y') }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="sf-repo-actions">
+        <a href="{{ url_for('repositories.detail', repo_id=repo.id) }}"
+           class="btn btn-sm btn-outline-primary flex-grow-1">
+          <i class="fa-solid fa-chart-line me-1"></i>View Details
+        </a>
+        <form method="POST" action="{{ url_for('repositories.trigger_scan', repo_id=repo.id) }}"
+              class="flex-shrink-0" onsubmit="return confirmScan('{{ repo.name }}')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-sm sf-btn-scan">
+            <i class="fa-solid fa-play me-1"></i>Scan
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="sf-empty-state sf-empty-large">
+  <i class="fa-brands fa-github fa-4x text-muted mb-3"></i>
+  <h3>No Repositories Connected</h3>
+  <p class="text-muted">Connect your GitHub repositories to start scanning for security vulnerabilities.</p>
+  <a href="{{ url_for('repositories.add') }}" class="btn sf-btn-primary mt-2">
+    <i class="fa-solid fa-plus me-2"></i>Connect Your First Repository
+  </a>
+</div>
+{% endif %}
+{% endblock %}

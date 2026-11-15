@@ -1,0 +1,337 @@
+{% extends 'base.html' %}
+{% block title %}Scan #{{ scan.id }}{% endblock %}
+{% block breadcrumb %}Scans / #{{ scan.id }}{% endblock %}
+
+{% block content %}
+<div class="sf-page-header">
+  <div>
+    <h1 class="sf-page-title">
+      <i class="fa-solid fa-magnifying-glass-chart me-2 text-primary"></i>
+      Scan #{{ scan.id }}
+      <span class="sf-badge sf-badge-{{ scan.status }} ms-2">{{ scan.status }}</span>
+    </h1>
+    <p class="sf-page-subtitle">
+      {{ repo.name }} &middot; {{ scan.trigger_type }} &middot;
+      {{ scan.created_at.strftime('%B %d, %Y %H:%M') if scan.created_at else '—' }}
+    </p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('repositories.detail', repo_id=repo.id) }}"
+       class="btn btn-outline-secondary">
+      <i class="fa-solid fa-arrow-left me-1"></i>Back to Repo
+    </a>
+    {% if scan.status == 'completed' %}
+    <div class="dropdown">
+      <button class="btn sf-btn-primary dropdown-toggle" data-bs-toggle="dropdown">
+        <i class="fa-solid fa-file-alt me-1"></i>Download Report
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        <li>
+          <form method="POST" action="{{ url_for('reports.generate', scan_id=scan.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="report_type" value="pdf">
+            <button type="submit" class="dropdown-item">
+              <i class="fa-solid fa-file-pdf me-2 text-danger"></i>PDF Report
+            </button>
+          </form>
+        </li>
+        <li>
+          <form method="POST" action="{{ url_for('reports.generate', scan_id=scan.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="report_type" value="json">
+            <button type="submit" class="dropdown-item">
+              <i class="fa-solid fa-file-code me-2 text-info"></i>JSON Report
+            </button>
+          </form>
+        </li>
+        <li>
+          <form method="POST" action="{{ url_for('reports.generate', scan_id=scan.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="report_type" value="csv">
+            <button type="submit" class="dropdown-item">
+              <i class="fa-solid fa-file-csv me-2 text-success"></i>CSV Export
+            </button>
+          </form>
+        </li>
+        <li><hr class="dropdown-divider"></li>
+        <li>
+          <a class="dropdown-item" href="{{ url_for('reports.index') }}">
+            <i class="fa-solid fa-clock-rotate-left me-2 text-muted"></i>View All Reports
+          </a>
+        </li>
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── Summary Cards ────────────────────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-2">
+    <div class="sf-stat-card sf-stat-red">
+      <div class="sf-stat-value">{{ scan.critical_count }}</div>
+      <div class="sf-stat-label">Critical</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="sf-stat-card sf-stat-orange">
+      <div class="sf-stat-value">{{ scan.high_count }}</div>
+      <div class="sf-stat-label">High</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="sf-stat-card sf-stat-yellow">
+      <div class="sf-stat-value">{{ scan.medium_count }}</div>
+      <div class="sf-stat-label">Medium</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="sf-stat-card sf-stat-blue">
+      <div class="sf-stat-value">{{ scan.low_count }}</div>
+      <div class="sf-stat-label">Low</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="sf-stat-card sf-stat-purple">
+      <div class="sf-stat-value">{{ scan.secrets_count }}</div>
+      <div class="sf-stat-label">Secrets</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    {% if score_data %}
+    <div class="sf-stat-card {% if score_data.score >= 75 %}sf-stat-green{% elif score_data.score >= 50 %}sf-stat-orange{% else %}sf-stat-red{% endif %}">
+      <div class="sf-stat-value">{{ score_data.score }}</div>
+      <div class="sf-stat-label">Score/100</div>
+    </div>
+    {% else %}
+    <div class="sf-stat-card sf-stat-gray">
+      <div class="sf-stat-value">—</div>
+      <div class="sf-stat-label">Score</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── Pipeline Visualization ───────────────────────────────────────────────── -->
+<div class="sf-card mb-4">
+  <div class="sf-card-header">
+    <span><i class="fa-solid fa-diagram-project me-2 text-primary"></i>Pipeline Stages</span>
+    {% if scan.status == 'running' %}
+    <span class="badge bg-primary"><i class="fa-solid fa-spinner fa-spin me-1"></i>Running</span>
+    {% endif %}
+  </div>
+  <div class="sf-card-body">
+    <div class="sf-pipeline-stepper" id="pipelineStepper">
+      {% for stage in pipeline_stages %}
+      <div class="sf-pipeline-stage sf-stage-{{ stage.status }}" id="stage-{{ stage.stage_name }}">
+        <div class="sf-stage-icon">
+          {% if stage.status == 'passed' %}
+            <i class="fa-solid fa-check"></i>
+          {% elif stage.status == 'failed' %}
+            <i class="fa-solid fa-xmark"></i>
+          {% elif stage.status == 'running' %}
+            <i class="fa-solid fa-spinner fa-spin"></i>
+          {% elif stage.status == 'skipped' %}
+            <i class="fa-solid fa-minus"></i>
+          {% else %}
+            <i class="fa-solid fa-circle-dot"></i>
+          {% endif %}
+        </div>
+        <div class="sf-stage-label">{{ stage.stage_name.replace('_', ' ').title() }}</div>
+        {% if stage.duration_seconds %}
+        <div class="sf-stage-duration">{{ stage.duration_display }}</div>
+        {% endif %}
+        {% if stage.output_log or stage.error_log %}
+        <button class="sf-stage-log-btn" type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#log-{{ stage.id }}">
+          <i class="fa-solid fa-terminal"></i>
+        </button>
+        {% endif %}
+      </div>
+      {% if not loop.last %}<div class="sf-stage-connector"></div>{% endif %}
+      {% endfor %}
+    </div>
+    <!-- Log panels -->
+    {% for stage in pipeline_stages %}
+    {% if stage.output_log or stage.error_log %}
+    <div class="collapse mt-2" id="log-{{ stage.id }}">
+      <div class="sf-log-panel">
+        <div class="sf-log-header">{{ stage.stage_name }} log</div>
+        {% if stage.output_log %}
+        <pre class="sf-log-content">{{ stage.output_log }}</pre>
+        {% endif %}
+        {% if stage.error_log %}
+        <pre class="sf-log-content text-danger">{{ stage.error_log }}</pre>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+</div>
+
+<!-- ── Security Gate + Risk Score Row ──────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="sf-card h-100">
+      <div class="sf-card-header">
+        <span><i class="fa-solid fa-gate me-2"></i>Security Gate Decision</span>
+      </div>
+      <div class="sf-card-body">
+        {% if scan.gate_decision %}
+        <div class="sf-gate-result {% if scan.gate_decision == 'passed' %}gate-passed{% else %}gate-failed{% endif %}">
+          <div class="sf-gate-icon">
+            {% if scan.gate_decision == 'passed' %}
+            <i class="fa-solid fa-shield-check fa-3x text-success"></i>
+            {% else %}
+            <i class="fa-solid fa-shield-xmark fa-3x text-danger"></i>
+            {% endif %}
+          </div>
+          <div class="sf-gate-label">
+            {% if scan.gate_decision == 'passed' %}
+            <span class="text-success fw-bold fs-5">✅ DEPLOYMENT AUTHORIZED</span>
+            {% else %}
+            <span class="text-danger fw-bold fs-5">🚫 DEPLOYMENT BLOCKED</span>
+            {% endif %}
+          </div>
+        </div>
+        {% if gate_reasons %}
+        <ul class="sf-gate-reasons mt-3">
+          {% for reason in gate_reasons %}
+          <li>{{ reason }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% else %}
+        <div class="text-muted text-center py-3">Gate evaluation not yet completed.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if score_data %}
+  <div class="col-md-6">
+    <div class="sf-card h-100">
+      <div class="sf-card-header">
+        <span><i class="fa-solid fa-gauge me-2"></i>Risk Score Breakdown</span>
+      </div>
+      <div class="sf-card-body">
+        <div class="d-flex align-items-center mb-3">
+          <div class="sf-score-pill-lg {% if score_data.score >= 75 %}score-good{% elif score_data.score >= 50 %}score-fair{% else %}score-bad{% endif %} me-3">
+            {{ score_data.score }}
+          </div>
+          <div>
+            <div class="fw-bold fs-5" style="color: {{ score_data.color }}">{{ score_data.category }}</div>
+            <div class="text-muted small">Out of 100 points</div>
+          </div>
+        </div>
+        {% for label, info in score_data.breakdown.items() %}
+        {% if info.count > 0 %}
+        <div class="sf-breakdown-row">
+          <span class="sf-breakdown-label">{{ label }}</span>
+          <span class="sf-breakdown-count">{{ info.count }}</span>
+          <span class="text-danger ms-auto">-{{ info.capped_deduction }}</span>
+        </div>
+        {% endif %}
+        {% endfor %}
+        <div class="sf-breakdown-total mt-2">
+          <span>Final Score</span>
+          <span class="fw-bold" style="color:{{ score_data.color }}">{{ score_data.score }}/100</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── Vulnerability Findings ───────────────────────────────────────────────── -->
+<div class="sf-card">
+  <div class="sf-card-header">
+    <span><i class="fa-solid fa-bug me-2 text-danger"></i>Vulnerability Findings ({{ vulns|length }})</span>
+  </div>
+  <div class="sf-card-body p-0">
+    {% if vulns %}
+    <div class="table-responsive">
+      <table class="sf-table table mb-0">
+        <thead>
+          <tr><th>Severity</th><th>Title</th><th>Scanner</th><th>File:Line</th><th>CVE</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for v in vulns %}
+          <tr>
+            <td>
+              <span class="sf-severity-badge sf-sev-{{ v.severity }}">
+                <i class="fa-solid {{ v.severity_icon }} me-1"></i>{{ v.severity }}
+              </span>
+            </td>
+            <td>
+              <div class="text-truncate fw-semibold" style="max-width:280px" title="{{ v.title }}">{{ v.title }}</div>
+              {% if v.package_name %}
+              <small class="text-muted">{{ v.package_name }} {{ v.installed_version or '' }}</small>
+              {% endif %}
+            </td>
+            <td><span class="badge bg-secondary">{{ v.scanner }}</span></td>
+            <td><small class="text-muted font-monospace">{{ v.file_display }}</small></td>
+            <td>
+              {% if v.cve_id %}
+              <a href="https://nvd.nist.gov/vuln/detail/{{ v.cve_id }}" target="_blank"
+                 class="text-info small">{{ v.cve_id }}</a>
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              <span class="badge bg-{{ 'success' if v.status == 'resolved' else 'secondary' if v.status in ('accepted','false_positive') else 'danger' }}">
+                {{ v.status.replace('_', ' ') }}
+              </span>
+            </td>
+            <td>
+              <a href="{{ url_for('vulnerabilities.detail', vuln_id=v.id) }}"
+                 class="btn btn-xs btn-outline-secondary">
+                <i class="fa-solid fa-eye"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="sf-empty-state py-4">
+      <i class="fa-solid fa-shield-halved fa-2x text-success mb-2"></i>
+      <p class="text-muted">No vulnerabilities detected in this scan.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if scan.status in ['pending', 'running'] %}
+<script>
+// Auto-refresh for running scans
+let pollInterval = setInterval(() => {
+  fetch('/api/scans/{{ scan.id }}')
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        const scan = data.data;
+        if (scan.status !== 'pending' && scan.status !== 'running') {
+          clearInterval(pollInterval);
+          location.reload();
+        }
+        // Update stage statuses
+        if (scan.pipeline_stages) {
+          scan.pipeline_stages.forEach(stage => {
+            const el = document.getElementById('stage-' + stage.stage_name);
+            if (el) {
+              el.className = 'sf-pipeline-stage sf-stage-' + stage.status;
+            }
+          });
+        }
+      }
+    })
+    .catch(() => {});
+}, 3000);
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,170 @@
+{% extends 'base.html' %}
+{% block title %}{{ repo.name }}{% endblock %}
+{% block breadcrumb %}Repositories / {{ repo.name }}{% endblock %}
+
+{% block content %}
+<div class="sf-page-header">
+  <div>
+    <h1 class="sf-page-title">
+      <i class="fa-brands fa-github me-2 text-primary"></i>{{ repo.name }}
+    </h1>
+    <p class="sf-page-subtitle">
+      <a href="{{ repo.url }}" target="_blank" class="text-muted">{{ repo.url }}</a>
+    </p>
+  </div>
+  <div class="d-flex gap-2">
+    <form method="POST" action="{{ url_for('repositories.trigger_scan', repo_id=repo.id) }}"
+          onsubmit="return confirmScan('{{ repo.name }}')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn sf-btn-primary">
+        <i class="fa-solid fa-play me-2"></i>Trigger Scan
+      </button>
+    </form>
+    <form method="POST" action="{{ url_for('repositories.delete', repo_id=repo.id) }}"
+          onsubmit="return confirm('Remove {{ repo.name }}? This will delete all scan data.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-danger">
+        <i class="fa-solid fa-trash me-1"></i>Remove
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ── Overview Cards ───────────────────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="sf-card text-center p-3">
+      {% set s = repo.security_score %}
+      <div class="sf-score-ring-lg {% if s is none %}ring-unknown{% elif s >= 75 %}ring-good{% elif s >= 50 %}ring-fair{% else %}ring-bad{% endif %} mx-auto"
+           style="width:100px;height:100px;" data-score="{{ s or 0 }}">
+        <div class="sf-score-inner">
+          <span class="fs-3 fw-bold">{{ s if s is not none else '—' }}</span>
+          <span class="text-muted small">/100</span>
+        </div>
+      </div>
+      <div class="mt-2 fw-semibold">Security Score</div>
+      <span class="badge bg-{{ repo.health_color }}">{{ repo.health_status }}</span>
+    </div>
+  </div>
+  <div class="col-md-9">
+    <div class="row g-3">
+      <div class="col-6 col-md-3">
+        <div class="sf-stat-card sf-stat-red">
+          <div class="sf-stat-icon"><i class="fa-solid fa-skull"></i></div>
+          <div class="sf-stat-value">{{ critical }}</div>
+          <div class="sf-stat-label">Critical</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="sf-stat-card sf-stat-orange">
+          <div class="sf-stat-icon"><i class="fa-solid fa-exclamation-circle"></i></div>
+          <div class="sf-stat-value">{{ high }}</div>
+          <div class="sf-stat-label">High</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="sf-stat-card sf-stat-yellow">
+          <div class="sf-stat-icon"><i class="fa-solid fa-exclamation-triangle"></i></div>
+          <div class="sf-stat-value">{{ medium }}</div>
+          <div class="sf-stat-label">Medium</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="sf-stat-card sf-stat-blue">
+          <div class="sf-stat-icon"><i class="fa-solid fa-info-circle"></i></div>
+          <div class="sf-stat-value">{{ low }}</div>
+          <div class="sf-stat-label">Low</div>
+        </div>
+      </div>
+      <div class="col-12">
+        <div class="sf-info-row">
+          <div><i class="fa-solid fa-code-branch text-muted me-1"></i><strong>Branch:</strong> {{ repo.default_branch }}</div>
+          {% if repo.language %}<div><i class="fa-solid fa-code text-muted me-1"></i><strong>Language:</strong> {{ repo.language }}</div>{% endif %}
+          <div><i class="fa-solid fa-clock text-muted me-1"></i><strong>Last Scan:</strong> {{ repo.last_scanned_at.strftime('%b %d, %Y %H:%M') if repo.last_scanned_at else 'Never' }}</div>
+          <div><i class="fa-solid fa-calendar text-muted me-1"></i><strong>Added:</strong> {{ repo.created_at.strftime('%b %d, %Y') if repo.created_at else '—' }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Scan History ─────────────────────────────────────────────────────────── -->
+<div class="sf-card mb-4">
+  <div class="sf-card-header">
+    <span><i class="fa-solid fa-clock-rotate-left me-2 text-primary"></i>Scan History</span>
+  </div>
+  <div class="sf-card-body p-0">
+    {% if scans %}
+    <div class="table-responsive">
+      <table class="sf-table table mb-0">
+        <thead>
+          <tr><th>#</th><th>Date</th><th>Trigger</th><th>Status</th><th>Score</th><th>Vulns</th><th>Gate</th><th>Duration</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for scan in scans %}
+          <tr>
+            <td><code class="text-muted">{{ scan.scan_uuid[:8] }}</code></td>
+            <td><small>{{ scan.created_at.strftime('%b %d %H:%M') if scan.created_at else '—' }}</small></td>
+            <td><span class="badge bg-secondary">{{ scan.trigger_type }}</span></td>
+            <td><span class="sf-badge sf-badge-{{ scan.status }}">{{ scan.status }}</span></td>
+            <td>
+              {% if scan.security_score is not none %}
+                <span class="sf-score-pill {% if scan.security_score >= 75 %}score-good{% elif scan.security_score >= 50 %}score-fair{% else %}score-bad{% endif %}">{{ scan.security_score }}</span>
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              <span class="text-danger fw-bold">{{ scan.critical_count }}</span>/
+              <span class="text-warning">{{ scan.high_count }}</span>/
+              <span class="text-info">{{ scan.medium_count }}</span>
+            </td>
+            <td>
+              {% if scan.gate_decision %}
+                <span class="sf-badge {% if scan.gate_decision == 'passed' %}sf-badge-passed{% else %}sf-badge-failed{% endif %}">{{ scan.gate_decision }}</span>
+              {% else %}—{% endif %}
+            </td>
+            <td><small class="text-muted">{{ scan.duration_display }}</small></td>
+            <td>
+              <a href="{{ url_for('scans.detail', scan_id=scan.id) }}"
+                 class="btn btn-xs btn-outline-secondary"><i class="fa-solid fa-eye"></i></a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="sf-empty-state py-4">
+      <p class="text-muted">No scans for this repository yet. Click "Trigger Scan" to start.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── Recent Open Vulnerabilities ─────────────────────────────────────────── -->
+{% if recent_vulns %}
+<div class="sf-card">
+  <div class="sf-card-header">
+    <span><i class="fa-solid fa-bug me-2 text-danger"></i>Open Vulnerabilities</span>
+    <a href="{{ url_for('vulnerabilities.index') }}?repo_id={{ repo.id }}" class="btn btn-sm btn-outline-danger">View All</a>
+  </div>
+  <div class="sf-card-body p-0">
+    <div class="table-responsive">
+      <table class="sf-table table mb-0">
+        <thead><tr><th>Severity</th><th>Title</th><th>Scanner</th><th>File</th><th></th></tr></thead>
+        <tbody>
+          {% for v in recent_vulns %}
+          <tr>
+            <td><span class="sf-severity-badge sf-sev-{{ v.severity }}">{{ v.severity }}</span></td>
+            <td><div class="text-truncate" style="max-width:300px">{{ v.title }}</div></td>
+            <td><span class="badge bg-secondary">{{ v.scanner }}</span></td>
+            <td><small class="text-muted">{{ v.file_display }}</small></td>
+            <td><a href="{{ url_for('vulnerabilities.detail', vuln_id=v.id) }}" class="btn btn-xs btn-outline-secondary"><i class="fa-solid fa-eye"></i></a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

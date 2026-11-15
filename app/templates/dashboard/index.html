@@ -1,0 +1,270 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+{% block breadcrumb %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="sf-page-header">
+  <div>
+    <h1 class="sf-page-title"><i class="fa-solid fa-gauge-high me-2 text-primary"></i>Security Dashboard</h1>
+    <p class="sf-page-subtitle">Real-time security overview of your repositories</p>
+  </div>
+  <a href="{{ url_for('repositories.add') }}" class="btn sf-btn-primary">
+    <i class="fa-solid fa-plus me-2"></i>Add Repository
+  </a>
+</div>
+
+<!-- ── Stat Cards ──────────────────────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="sf-stat-card sf-stat-blue">
+      <div class="sf-stat-icon"><i class="fa-brands fa-github"></i></div>
+      <div class="sf-stat-value">{{ stats.total_repos }}</div>
+      <div class="sf-stat-label">Repositories</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="sf-stat-card sf-stat-cyan">
+      <div class="sf-stat-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></div>
+      <div class="sf-stat-value">{{ stats.total_scans }}</div>
+      <div class="sf-stat-label">Total Scans</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="sf-stat-card sf-stat-red">
+      <div class="sf-stat-icon"><i class="fa-solid fa-skull"></i></div>
+      <div class="sf-stat-value">{{ stats.critical_count }}</div>
+      <div class="sf-stat-label">Critical</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="sf-stat-card sf-stat-orange">
+      <div class="sf-stat-icon"><i class="fa-solid fa-exclamation-circle"></i></div>
+      <div class="sf-stat-value">{{ stats.high_count }}</div>
+      <div class="sf-stat-label">High</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    {% set score = stats.overall_score %}
+    <div class="sf-stat-card {% if score is none %}sf-stat-gray{% elif score >= 75 %}sf-stat-green{% elif score >= 50 %}sf-stat-orange{% else %}sf-stat-red{% endif %}">
+      <div class="sf-stat-icon"><i class="fa-solid fa-shield-halved"></i></div>
+      <div class="sf-stat-value">{{ score if score is not none else '—' }}</div>
+      <div class="sf-stat-label">Avg Score</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    {% set total_p = stats.successful_pipelines + stats.failed_pipelines %}
+    {% set pass_rate = ((stats.successful_pipelines / total_p) * 100)|int if total_p > 0 else 0 %}
+    <div class="sf-stat-card {% if pass_rate >= 80 %}sf-stat-green{% elif pass_rate >= 50 %}sf-stat-orange{% else %}sf-stat-red{% endif %}">
+      <div class="sf-stat-icon"><i class="fa-solid fa-circle-check"></i></div>
+      <div class="sf-stat-value">{{ pass_rate }}%</div>
+      <div class="sf-stat-label">Pipeline Pass</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Charts Row ──────────────────────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="sf-card h-100">
+      <div class="sf-card-header">
+        <span><i class="fa-solid fa-chart-pie me-2 text-primary"></i>Severity Distribution</span>
+      </div>
+      <div class="sf-card-body d-flex align-items-center justify-content-center" style="min-height:220px">
+        {% if stats.total_vulns > 0 %}
+        <canvas id="severityChart" height="220"></canvas>
+        {% else %}
+        <div class="sf-empty-mini">
+          <i class="fa-solid fa-shield-halved text-success fa-2x mb-2"></i>
+          <p class="text-muted mb-0">No vulnerabilities found</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-5">
+    <div class="sf-card h-100">
+      <div class="sf-card-header">
+        <span><i class="fa-solid fa-chart-line me-2 text-info"></i>Scan History (30 days)</span>
+      </div>
+      <div class="sf-card-body" style="min-height:220px">
+        <canvas id="scanHistoryChart" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="sf-card h-100">
+      <div class="sf-card-header">
+        <span><i class="fa-solid fa-chart-bar me-2 text-warning"></i>Pipeline Status</span>
+      </div>
+      <div class="sf-card-body d-flex align-items-center justify-content-center" style="min-height:220px">
+        <canvas id="pipelineChart" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Recent Scans + Repo Health ─────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-8">
+    <div class="sf-card">
+      <div class="sf-card-header">
+        <span><i class="fa-solid fa-clock-rotate-left me-2 text-primary"></i>Recent Scans</span>
+        <a href="{{ url_for('scans.index') }}" class="btn btn-sm btn-outline-primary">View All</a>
+      </div>
+      <div class="sf-card-body p-0">
+        {% if recent_scans %}
+        <div class="table-responsive">
+          <table class="sf-table table mb-0">
+            <thead>
+              <tr>
+                <th>Repository</th>
+                <th>Started</th>
+                <th>Status</th>
+                <th>Score</th>
+                <th>Gate</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for scan in recent_scans %}
+              <tr>
+                <td>
+                  <div class="sf-repo-name">{{ scan.repository.name if scan.repository else 'Unknown' }}</div>
+                  <small class="text-muted">{{ scan.trigger_type }}</small>
+                </td>
+                <td>
+                  <small>{{ scan.created_at.strftime('%b %d, %H:%M') if scan.created_at else '—' }}</small>
+                </td>
+                <td>
+                  <span class="sf-badge sf-badge-{{ scan.status }}">
+                    {% if scan.status == 'running' %}<i class="fa-solid fa-spinner fa-spin me-1"></i>{% endif %}
+                    {{ scan.status }}
+                  </span>
+                </td>
+                <td>
+                  {% if scan.security_score is not none %}
+                    <span class="sf-score-pill {% if scan.security_score >= 75 %}score-good{% elif scan.security_score >= 50 %}score-fair{% else %}score-bad{% endif %}">
+                      {{ scan.security_score }}
+                    </span>
+                  {% else %}—{% endif %}
+                </td>
+                <td>
+                  {% if scan.gate_decision %}
+                    <span class="sf-badge {% if scan.gate_decision == 'passed' %}sf-badge-passed{% else %}sf-badge-failed{% endif %}">
+                      {{ scan.gate_decision }}
+                    </span>
+                  {% else %}—{% endif %}
+                </td>
+                <td>
+                  <a href="{{ url_for('scans.detail', scan_id=scan.id) }}"
+                     class="btn btn-xs btn-outline-secondary">
+                    <i class="fa-solid fa-eye"></i>
+                  </a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="sf-empty-state py-4">
+          <i class="fa-solid fa-magnifying-glass-chart fa-2x text-muted mb-2"></i>
+          <p class="text-muted">No scans yet. <a href="{{ url_for('repositories.add') }}">Add a repository</a> and trigger a scan.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="sf-card h-100">
+      <div class="sf-card-header">
+        <span><i class="fa-solid fa-heart-pulse me-2 text-danger"></i>Repository Health</span>
+        <a href="{{ url_for('repositories.index') }}" class="btn btn-sm btn-outline-primary">All Repos</a>
+      </div>
+      <div class="sf-card-body p-0">
+        {% if repo_health %}
+          {% for repo in repo_health[:8] %}
+          <a href="{{ url_for('repositories.detail', repo_id=repo.id) }}" class="sf-repo-health-item">
+            <div class="sf-health-dot sf-health-{{ repo.health_status }}"></div>
+            <div class="sf-repo-health-info">
+              <div class="sf-repo-health-name">{{ repo.name.split('/')[-1] }}</div>
+              <div class="sf-repo-health-score text-muted small">
+                Score: {{ repo.security_score if repo.security_score is not none else '—' }}/100
+              </div>
+            </div>
+            <span class="badge bg-{{ repo.health_color }} ms-auto">{{ repo.health_status }}</span>
+          </a>
+          {% endfor %}
+        {% else %}
+        <div class="sf-empty-state py-4">
+          <i class="fa-brands fa-github fa-2x text-muted mb-2"></i>
+          <p class="text-muted">No repositories connected yet.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Recent Vulnerabilities ──────────────────────────────────────────────── -->
+{% if recent_vulns %}
+<div class="sf-card mb-4">
+  <div class="sf-card-header">
+    <span><i class="fa-solid fa-bug me-2 text-danger"></i>Recent Open Vulnerabilities</span>
+    <a href="{{ url_for('vulnerabilities.index') }}" class="btn btn-sm btn-outline-danger">View All</a>
+  </div>
+  <div class="sf-card-body p-0">
+    <div class="table-responsive">
+      <table class="sf-table table mb-0">
+        <thead>
+          <tr><th>Severity</th><th>Title</th><th>Scanner</th><th>Repository</th><th>Detected</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for v in recent_vulns %}
+          <tr>
+            <td>
+              <span class="sf-severity-badge sf-sev-{{ v.severity }}">
+                <i class="fa-solid {{ v.severity_icon }} me-1"></i>{{ v.severity }}
+              </span>
+            </td>
+            <td><div class="text-truncate" style="max-width:280px" title="{{ v.title }}">{{ v.title }}</div></td>
+            <td><span class="badge bg-secondary">{{ v.scanner }}</span></td>
+            <td><small class="text-muted">{{ v.repository.name if v.repository else '—' }}</small></td>
+            <td><small class="text-muted">{{ v.created_at.strftime('%b %d') if v.created_at else '—' }}</small></td>
+            <td>
+              <a href="{{ url_for('vulnerabilities.detail', vuln_id=v.id) }}"
+                 class="btn btn-xs btn-outline-secondary"><i class="fa-solid fa-eye"></i></a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script>
+// Pass server-side data to JS charts
+const DASHBOARD_DATA = {
+  severity: {
+    critical: {{ stats.critical_count }},
+    high: {{ stats.high_count }},
+    medium: {{ stats.medium_count }},
+    low: {{ stats.low_count }}
+  },
+  pipeline: {
+    passed: {{ stats.successful_pipelines }},
+    failed: {{ stats.failed_pipelines }}
+  }
+};
+document.addEventListener('DOMContentLoaded', () => {
+  initDashboardCharts(DASHBOARD_DATA);
+  loadChartData();
+});
+</script>
+{% endblock %}

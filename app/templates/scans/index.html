@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+{% block title %}Scan History{% endblock %}
+{% block breadcrumb %}Scan History{% endblock %}
+
+{% block content %}
+<div class="sf-page-header">
+  <div>
+    <h1 class="sf-page-title"><i class="fa-solid fa-clock-rotate-left me-2 text-primary"></i>Scan History</h1>
+    <p class="sf-page-subtitle">All security scans across your repositories</p>
+  </div>
+  <a href="{{ url_for('scans.compare') }}" class="btn btn-outline-primary">
+    <i class="fa-solid fa-code-compare me-2"></i>Compare Scans
+  </a>
+</div>
+
+<!-- Filters -->
+<div class="sf-card mb-3">
+  <div class="sf-card-body">
+    <form method="GET" class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label small text-muted">Repository</label>
+        <select name="repo_id" class="form-select sf-select" onchange="this.form.submit()">
+          <option value="">All Repositories</option>
+          {% for repo in repos %}
+          <option value="{{ repo.id }}" {% if selected_repo == repo.id %}selected{% endif %}>
+            {{ repo.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small text-muted">Status</label>
+        <select name="status" class="form-select sf-select" onchange="this.form.submit()">
+          <option value="">All Statuses</option>
+          <option value="completed" {% if selected_status == 'completed' %}selected{% endif %}>Completed</option>
+          <option value="running" {% if selected_status == 'running' %}selected{% endif %}>Running</option>
+          <option value="failed" {% if selected_status == 'failed' %}selected{% endif %}>Failed</option>
+          <option value="pending" {% if selected_status == 'pending' %}selected{% endif %}>Pending</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <a href="{{ url_for('scans.index') }}" class="btn btn-outline-secondary w-100">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="sf-card">
+  <div class="sf-card-body p-0">
+    {% if scans.items %}
+    <div class="table-responsive">
+      <table class="sf-table table mb-0">
+        <thead>
+          <tr>
+            <th>Scan ID</th><th>Repository</th><th>Trigger</th><th>Branch</th>
+            <th>Started</th><th>Duration</th><th>Status</th><th>Score</th>
+            <th>Critical/High</th><th>Gate</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for scan in scans.items %}
+          <tr class="sf-clickable-row" data-href="{{ url_for('scans.detail', scan_id=scan.id) }}">
+            <td><code class="text-muted small">{{ scan.scan_uuid[:8] }}…</code></td>
+            <td>
+              <div class="fw-semibold small">{{ scan.repository.name if scan.repository else '—' }}</div>
+            </td>
+            <td><span class="badge bg-secondary">{{ scan.trigger_type }}</span></td>
+            <td><small class="text-muted">{{ scan.branch or '—' }}</small></td>
+            <td><small>{{ scan.started_at.strftime('%b %d %H:%M') if scan.started_at else '—' }}</small></td>
+            <td><small class="text-muted">{{ scan.duration_display }}</small></td>
+            <td>
+              <span class="sf-badge sf-badge-{{ scan.status }}">
+                {% if scan.status == 'running' %}<i class="fa-solid fa-spinner fa-spin me-1"></i>{% endif %}
+                {{ scan.status }}
+              </span>
+            </td>
+            <td>
+              {% if scan.security_score is not none %}
+                <span class="sf-score-pill {% if scan.security_score >= 75 %}score-good{% elif scan.security_score >= 50 %}score-fair{% else %}score-bad{% endif %}">
+                  {{ scan.security_score }}
+                </span>
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              <span class="text-danger fw-bold">{{ scan.critical_count }}</span>
+              <span class="text-muted"> / </span>
+              <span class="text-warning">{{ scan.high_count }}</span>
+            </td>
+            <td>
+              {% if scan.gate_decision %}
+                <span class="sf-badge {% if scan.gate_decision == 'passed' %}sf-badge-passed{% else %}sf-badge-failed{% endif %}">
+                  {{ scan.gate_decision }}
+                </span>
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              <a href="{{ url_for('scans.detail', scan_id=scan.id) }}"
+                 class="btn btn-xs btn-outline-secondary" onclick="event.stopPropagation()">
+                <i class="fa-solid fa-eye"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <!-- Pagination -->
+    {% if scans.pages > 1 %}
+    <div class="d-flex justify-content-center py-3">
+      <nav>
+        <ul class="pagination pagination-sm mb-0">
+          {% if scans.has_prev %}
+          <li class="page-item"><a class="page-link" href="?page={{ scans.prev_num }}{% if selected_repo %}&repo_id={{ selected_repo }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}">‹</a></li>
+          {% endif %}
+          <li class="page-item active"><a class="page-link">{{ scans.page }} / {{ scans.pages }}</a></li>
+          {% if scans.has_next %}
+          <li class="page-item"><a class="page-link" href="?page={{ scans.next_num }}{% if selected_repo %}&repo_id={{ selected_repo }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}">›</a></li>
+          {% endif %}
+        </ul>
+      </nav>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="sf-empty-state py-5">
+      <i class="fa-solid fa-magnifying-glass-chart fa-3x text-muted mb-3"></i>
+      <h4>No scans found</h4>
+      <p class="text-muted">Go to a repository and click "Trigger Scan" to start.</p>
+      <a href="{{ url_for('repositories.index') }}" class="btn sf-btn-primary mt-2">
+        <i class="fa-brands fa-github me-2"></i>Go to Repositories
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

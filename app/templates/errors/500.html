@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}500 – Server Error{% endblock %}
+{% block content %}
+<div class="sf-error-page">
+  <div class="sf-error-code text-danger">500</div>
+  <div class="sf-error-title">Internal Server Error</div>
+  <p class="text-muted">Something went wrong on our end. Please try again later.</p>
+  <a href="{{ url_for('dashboard.index') }}" class="btn sf-btn-primary mt-3">
+    <i class="fa-solid fa-house me-2"></i>Back to Dashboard
+  </a>
+</div>
+{% endblock %}

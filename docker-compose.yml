@@ -1,0 +1,70 @@
+version: "3.9"
+
+services:
+  # ── SecureFlow Web Application ──────────────────────────────────────────────
+  secureflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: secureflow_app
+    ports:
+      - "${FLASK_PORT:-5000}:5000"
+    volumes:
+      - secureflow_instance:/app/instance
+      - secureflow_reports:/app/reports
+      - secureflow_workspace:/app/scan_workspace
+    environment:
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=sqlite:////app/instance/secureflow.db
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - SONARQUBE_URL=http://sonarqube:9000
+      - SONARQUBE_TOKEN=${SONARQUBE_TOKEN}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@secureflow.local}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+    depends_on:
+      sonarqube:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - secureflow_net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── SonarQube Community ─────────────────────────────────────────────────────
+  sonarqube:
+    image: sonarqube:community
+    container_name: secureflow_sonar
+    ports:
+      - "9000:9000"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_logs:/opt/sonarqube/logs
+      - sonarqube_extensions:/opt/sonarqube/extensions
+    environment:
+      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+    restart: unless-stopped
+    networks:
+      - secureflow_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/api/system/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+volumes:
+  secureflow_instance:
+  secureflow_reports:
+  secureflow_workspace:
+  sonarqube_data:
+  sonarqube_logs:
+  sonarqube_extensions:
+
+networks:
+  secureflow_net:
+    driver: bridge

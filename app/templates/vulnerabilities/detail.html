@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+{% block title %}{{ vuln.title[:60] }}{% endblock %}
+{% block breadcrumb %}Vulnerabilities / Detail{% endblock %}
+
+{% block content %}
+<div class="sf-page-header">
+  <div>
+    <h1 class="sf-page-title">
+      <span class="sf-severity-badge sf-sev-{{ vuln.severity }} me-2">{{ vuln.severity }}</span>
+      {{ vuln.title[:80] }}{% if vuln.title|length > 80 %}…{% endif %}
+    </h1>
+    <p class="sf-page-subtitle">
+      Detected by <strong>{{ vuln.scanner }}</strong> &middot;
+      {{ vuln.created_at.strftime('%B %d, %Y') if vuln.created_at else '—' }}
+    </p>
+  </div>
+  <a href="{{ url_for('vulnerabilities.index') }}" class="btn btn-outline-secondary">
+    <i class="fa-solid fa-arrow-left me-1"></i>Back
+  </a>
+</div>
+
+<div class="row g-3">
+  <!-- Main Details -->
+  <div class="col-lg-8">
+    <div class="sf-card mb-3">
+      <div class="sf-card-header"><span><i class="fa-solid fa-circle-info me-2"></i>Details</span></div>
+      <div class="sf-card-body">
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <label class="sf-detail-label">Severity</label>
+            <div><span class="sf-severity-badge sf-sev-{{ vuln.severity }}">{{ vuln.severity.upper() }}</span></div>
+          </div>
+          <div class="col-sm-6">
+            <label class="sf-detail-label">Confidence</label>
+            <div>{{ vuln.confidence or '—' }}</div>
+          </div>
+          <div class="col-sm-6">
+            <label class="sf-detail-label">Scanner</label>
+            <div><span class="badge bg-secondary">{{ vuln.scanner }}</span></div>
+          </div>
+          <div class="col-sm-6">
+            <label class="sf-detail-label">Type / Rule</label>
+            <div class="font-monospace small">{{ vuln.vuln_type or '—' }}</div>
+          </div>
+          {% if vuln.file_path %}
+          <div class="col-12">
+            <label class="sf-detail-label">File Location</label>
+            <div class="font-monospace small">{{ vuln.file_path }}{% if vuln.line_number %}:{{ vuln.line_number }}{% endif %}</div>
+          </div>
+          {% endif %}
+          {% if vuln.cve_id %}
+          <div class="col-sm-6">
+            <label class="sf-detail-label">CVE ID</label>
+            <div>
+              <a href="https://nvd.nist.gov/vuln/detail/{{ vuln.cve_id }}" target="_blank" class="text-info">
+                {{ vuln.cve_id }} <i class="fa-solid fa-external-link fa-xs"></i>
+              </a>
+            </div>
+          </div>
+          {% endif %}
+          {% if vuln.package_name %}
+          <div class="col-sm-4">
+            <label class="sf-detail-label">Package</label>
+            <div class="font-monospace">{{ vuln.package_name }}</div>
+          </div>
+          <div class="col-sm-4">
+            <label class="sf-detail-label">Installed</label>
+            <div class="text-warning font-monospace">{{ vuln.installed_version or '—' }}</div>
+          </div>
+          <div class="col-sm-4">
+            <label class="sf-detail-label">Fixed In</label>
+            <div class="text-success font-monospace">{{ vuln.fixed_version or 'No fix available' }}</div>
+          </div>
+          {% endif %}
+        </div>
+
+        {% if vuln.description %}
+        <hr>
+        <label class="sf-detail-label">Description</label>
+        <p>{{ vuln.description }}</p>
+        {% endif %}
+
+        {% if vuln.code_snippet %}
+        <hr>
+        <label class="sf-detail-label">Code Snippet</label>
+        <pre class="sf-code-block">{{ vuln.code_snippet }}</pre>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Remediation -->
+    {% if vuln.remediation %}
+    <div class="sf-card sf-remediation-card mb-3">
+      <div class="sf-card-header">
+        <span><i class="fa-solid fa-wrench me-2 text-success"></i>Remediation Guidance</span>
+      </div>
+      <div class="sf-card-body">
+        <p>{{ vuln.remediation }}</p>
+        {% if vuln.cve_id %}
+        <a href="https://nvd.nist.gov/vuln/detail/{{ vuln.cve_id }}" target="_blank"
+           class="btn btn-sm btn-outline-info">
+          <i class="fa-solid fa-external-link me-1"></i>View CVE Details on NVD
+        </a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Sidebar: Status Management -->
+  <div class="col-lg-4">
+    <div class="sf-card mb-3">
+      <div class="sf-card-header"><span><i class="fa-solid fa-clipboard-check me-2"></i>Status</span></div>
+      <div class="sf-card-body">
+        <div class="mb-3">
+          <div class="sf-detail-label">Current Status</div>
+          <span class="badge fs-6 bg-{{ 'success' if vuln.status == 'resolved' else 'info' if vuln.status == 'accepted' else 'secondary' if vuln.status == 'false_positive' else 'danger' }}">
+            {{ vuln.status.replace('_', ' ').title() }}
+          </span>
+        </div>
+        {% if vuln.status == 'open' %}
+        <div class="d-grid gap-2">
+          <form method="POST" action="{{ url_for('vulnerabilities.resolve', vuln_id=vuln.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-success w-100">
+              <i class="fa-solid fa-check me-2"></i>Mark Resolved
+            </button>
+          </form>
+          <form method="POST" action="{{ url_for('vulnerabilities.accept', vuln_id=vuln.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-info w-100">
+              <i class="fa-solid fa-thumbs-up me-2"></i>Accept Risk
+            </button>
+          </form>
+          <form method="POST" action="{{ url_for('vulnerabilities.mark_false_positive', vuln_id=vuln.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-secondary w-100">
+              <i class="fa-solid fa-xmark me-2"></i>False Positive
+            </button>
+          </form>
+        </div>
+        {% else %}
+        <div class="text-muted small">
+          {% if vuln.resolved_at %}Resolved: {{ vuln.resolved_at.strftime('%b %d, %Y') }}{% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="sf-card">
+      <div class="sf-card-header"><span><i class="fa-solid fa-link me-2"></i>Related</span></div>
+      <div class="sf-card-body">
+        <div class="sf-detail-label">Repository</div>
+        <a href="{{ url_for('repositories.detail', repo_id=vuln.repository_id) }}" class="d-block mb-2">
+          {{ vuln.repository.name if vuln.repository else '—' }}
+        </a>
+        <div class="sf-detail-label">Scan</div>
+        <a href="{{ url_for('scans.detail', scan_id=vuln.scan_id) }}" class="d-block">
+          Scan #{{ vuln.scan_id }}
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

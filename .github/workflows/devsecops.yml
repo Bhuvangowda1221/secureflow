@@ -1,0 +1,370 @@
+name: "SecureFlow DevSecOps Pipeline"
+
+on:
+  push:
+    branches: [ main, develop, "feature/**" ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+  FLASK_ENV: testing
+  SECRET_KEY: ${{ secrets.SECRET_KEY || 'ci-test-secret-key-32chars' }}
+
+jobs:
+
+  # ══════════════════════════════════════════════════════════
+  # STAGE 1 — Checkout & Setup
+  # ══════════════════════════════════════════════════════════
+  setup:
+    name: "🔧 Setup Python"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for Gitleaks
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+
+  # ══════════════════════════════════════════════════════════
+  # STAGE 2 — Automated Tests
+  # ══════════════════════════════════════════════════════════
+  test:
+    name: "🧪 Run Tests"
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}", cache: pip }
+      - run: pip install -r requirements.txt
+
+      - name: Run pytest with coverage
+        run: |
+          pytest tests/ -v \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-report=html:htmlcov \
+            --tb=short \
+            -q
+        env:
+          FLASK_ENV: testing
+          SECRET_KEY: test-secret-key
+          ADMIN_EMAIL: admin@test.local
+          ADMIN_PASSWORD: TestAdmin123!
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            htmlcov/
+
+      - name: Coverage summary
+        run: |
+          python -c "
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('coverage.xml')
+          root = tree.getroot()
+          cov = float(root.attrib.get('line-rate', 0)) * 100
+          print(f'Code Coverage: {cov:.1f}%')
+          "
+
+  # ══════════════════════════════════════════════════════════
+  # STAGE 3 — Bandit SAST Scan
+  # ══════════════════════════════════════════════════════════
+  bandit:
+    name: "🔍 Bandit SAST Scan"
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}", cache: pip }
+      - run: pip install bandit
+
+      - name: Run Bandit on application code
+        run: |
+          bandit -r app/ -f json -o bandit-report.json -ll --quiet || true
+          bandit -r app/ -f txt -ll --quiet || true
+
+      - name: Run Bandit on sample vulnerable app (should find issues)
+        run: |
+          echo "=== Scanning vulnerable sample app ==="
+          bandit -r sample-app/vulnerable/ -f txt -ll || true
+          echo ""
+          echo "=== Scanning secure sample app (fewer issues expected) ==="
+          bandit -r sample-app/secure/ -f txt -ll || true
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+  # ══════════════════════════════════════════════════════════
+  # STAGE 4 — pip-audit Dependency Scan
+  # ══════════════════════════════════════════════════════════
+  pip-audit:
+    name: "📦 Dependency Vulnerability Scan"
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}", cache: pip }
+      - run: pip install pip-audit
+
+      - name: Run pip-audit
+        run: |
+          pip-audit -r requirements.txt --format json -o pip-audit-report.json || true
+          pip-audit -r requirements.txt || true
+
+      - name: Upload pip-audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json
+
+  # ══════════════════════════════════════════════════════════
+  # STAGE 5 — Gitleaks Secret Detection
+  # ══════════════════════════════════════════════════════════
+  gitleaks:
+    name: "🔐 Secret Detection (Gitleaks)"
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true  # Report but don't block
+
+      - name: Gitleaks direct scan (fallback)
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
+            | tar -xz gitleaks 2>/dev/null || true
+          if [ -f gitleaks ]; then
+            ./gitleaks detect --source=. --report-format json \
+              --report-path gitleaks-report.json --no-git || true
+          fi
+        continue-on-error: true
+
+      - name: Upload Gitleaks report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+
+  # ══════════════════════════════════════════════════════════
+  # STAGE 6 — Trivy Filesystem Scan
+  # ══════════════════════════════════════════════════════════
+  trivy:
+    name: "🛡️ Trivy Filesystem Scan"
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: "."
+          format: sarif
+          output: trivy-results.sarif
+          severity: "HIGH,CRITICAL"
+        continue-on-error: true
+
+      - name: Run Trivy (table format for humans)
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin v0.57.1 2>/dev/null || true
+          if command -v trivy >/dev/null 2>&1; then
+            trivy fs . --severity HIGH,CRITICAL || true
+          fi
+        continue-on-error: true
+
+      - name: Upload Trivy SARIF report
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+        continue-on-error: true
+
+  # ══════════════════════════════════════════════════════════
+  # STAGE 7 — Security Gate Decision
+  # ══════════════════════════════════════════════════════════
+  security-gate:
+    name: "🚦 Security Gate"
+    runs-on: ubuntu-latest
+    needs: [ test, bandit, pip-audit, gitleaks, trivy ]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ env.PYTHON_VERSION }}", cache: pip }
+      - run: pip install -r requirements.txt
+
+      - name: Download all reports
+        uses: actions/download-artifact@v4
+
+      - name: Evaluate security gate
+        run: |
+          python - <<'EOF'
+          import json, os, sys
+
+          critical = 0
+          high = 0
+          secrets = 0
+          failed_tests = 0
+          reasons = []
+          warnings_list = []
+
+          # Check test results
+          test_result = '${{ needs.test.result }}'
+          if test_result == 'failure':
+              failed_tests = 1
+              reasons.append("BLOCKED: Automated tests failed")
+
+          # Check Bandit report
+          try:
+              with open('bandit-report/bandit-report.json') as f:
+                  bandit_data = json.load(f)
+              for r in bandit_data.get('results', []):
+                  sev = r.get('issue_severity', '').upper()
+                  if sev == 'HIGH':
+                      high += 1
+                  # Count any CRITICAL findings
+                  if 'critical' in r.get('issue_text', '').lower():
+                      critical += 1
+              print(f"Bandit: {high} HIGH findings")
+          except Exception as e:
+              print(f"Bandit report not available: {e}")
+
+          # Check Gitleaks
+          try:
+              with open('gitleaks-report/gitleaks-report.json') as f:
+                  gl_data = json.load(f)
+              if isinstance(gl_data, list):
+                  secrets = len(gl_data)
+              print(f"Gitleaks: {secrets} secrets found")
+          except Exception as e:
+              print(f"Gitleaks report not available: {e}")
+
+          # Policy evaluation
+          if critical > 0:
+              reasons.append(f"BLOCKED: {critical} critical vulnerability/vulnerabilities detected")
+          if secrets > 0:
+              reasons.append(f"BLOCKED: {secrets} exposed secret(s) detected")
+          if failed_tests > 0:
+              reasons.append("BLOCKED: Tests failed")
+          if high > 5:
+              warnings_list.append(f"WARNING: {high} high severity findings — review before merge")
+
+          # Decision
+          blocked = len(reasons) > 0
+          print("\n" + "="*60)
+          print("SECUREFLOW SECURITY GATE DECISION")
+          print("="*60)
+          if blocked:
+              print("RESULT: DEPLOYMENT BLOCKED")
+              for r in reasons:
+                  print(f"  - {r}")
+          else:
+              print("RESULT: DEPLOYMENT AUTHORIZED")
+          for w in warnings_list:
+              print(f"  - {w}")
+          print("="*60)
+
+          if blocked:
+              sys.exit(1)  # Fail the pipeline
+          EOF
+
+      - name: Generate final summary
+        if: always()
+        run: |
+          echo "## SecureFlow Security Gate Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bandit SAST | ${{ needs.bandit.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| pip-audit | ${{ needs.pip-audit.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gitleaks | ${{ needs.gitleaks.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy | ${{ needs.trivy.result }} |" >> $GITHUB_STEP_SUMMARY
+
+  # ══════════════════════════════════════════════════════════
+  # STAGE 8 — Generate Security Report Artifact
+  # ══════════════════════════════════════════════════════════
+  report:
+    name: "📋 Security Report"
+    runs-on: ubuntu-latest
+    needs: security-gate
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Generate consolidated JSON report
+        run: |
+          python - <<'EOF'
+          import json, datetime, os
+
+          report = {
+              "tool": "SecureFlow DevSecOps Pipeline",
+              "version": "1.0.0",
+              "generated_at": datetime.datetime.utcnow().isoformat(),
+              "repository": os.environ.get("GITHUB_REPOSITORY", "unknown"),
+              "branch": os.environ.get("GITHUB_REF_NAME", "unknown"),
+              "commit": os.environ.get("GITHUB_SHA", "unknown"),
+              "scanner_reports": {}
+          }
+
+          for name, path in [
+              ("bandit", "bandit-report/bandit-report.json"),
+              ("pip_audit", "pip-audit-report/pip-audit-report.json"),
+              ("gitleaks", "gitleaks-report/gitleaks-report.json"),
+          ]:
+              try:
+                  with open(path) as f:
+                      report["scanner_reports"][name] = json.load(f)
+              except Exception:
+                  report["scanner_reports"][name] = {"error": "not available"}
+
+          with open("secureflow-report.json", "w") as f:
+              json.dump(report, f, indent=2, default=str)
+          print("Security report generated: secureflow-report.json")
+          EOF
+
+      - name: Upload consolidated security report
+        uses: actions/upload-artifact@v4
+        with:
+          name: secureflow-security-report
+          path: secureflow-report.json
+          retention-days: 90

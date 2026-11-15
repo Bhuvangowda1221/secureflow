@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Register{% endblock %}
+
+{% block auth_content %}
+<div class="sf-auth-wrapper">
+  <div class="sf-auth-left">
+    <div class="sf-auth-left-content">
+      <div class="sf-auth-logo">
+        <i class="fa-solid fa-shield-halved"></i>
+        <span>SecureFlow</span>
+      </div>
+      <h1 class="sf-auth-tagline">Join the<br>DevSecOps<br>Revolution.</h1>
+      <p class="sf-auth-desc">
+        Start securing your code from day one. Connect your GitHub repositories and
+        get instant security insights with automated vulnerability scanning.
+      </p>
+    </div>
+  </div>
+
+  <div class="sf-auth-right">
+    <div class="sf-auth-card">
+      <div class="sf-auth-card-header">
+        <div class="sf-auth-card-logo">
+          <i class="fa-solid fa-user-shield"></i>
+        </div>
+        <h2>Create Account</h2>
+        <p class="text-muted">Start securing your DevOps pipeline</p>
+      </div>
+
+      <form method="POST" action="{{ url_for('auth.register') }}" novalidate
+            id="registerForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="mb-3">
+          <label for="username" class="form-label">Username</label>
+          <div class="sf-input-group">
+            <i class="fa-solid fa-user sf-input-icon"></i>
+            <input type="text" class="form-control sf-input" id="username"
+                   name="username" placeholder="yourname"
+                   value="{{ username or '' }}" required minlength="3">
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="email" class="form-label">Email Address</label>
+          <div class="sf-input-group">
+            <i class="fa-solid fa-envelope sf-input-icon"></i>
+            <input type="email" class="form-control sf-input" id="email"
+                   name="email" placeholder="you@example.com"
+                   value="{{ email or '' }}" required>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="password" class="form-label">Password</label>
+          <div class="sf-input-group">
+            <i class="fa-solid fa-lock sf-input-icon"></i>
+            <input type="password" class="form-control sf-input" id="password"
+                   name="password" placeholder="Minimum 8 characters" required minlength="8"
+                   oninput="checkPasswordStrength(this.value)">
+          </div>
+          <div class="sf-password-strength mt-2">
+            <div class="sf-strength-bar" id="strengthBar"></div>
+          </div>
+          <small class="text-muted" id="strengthText"></small>
+        </div>
+
+        <div class="mb-4">
+          <label for="confirm_password" class="form-label">Confirm Password</label>
+          <div class="sf-input-group">
+            <i class="fa-solid fa-lock sf-input-icon"></i>
+            <input type="password" class="form-control sf-input" id="confirm_password"
+                   name="confirm_password" placeholder="Repeat your password" required>
+          </div>
+        </div>
+
+        <button type="submit" class="btn sf-btn-primary w-100 mb-3">
+          <i class="fa-solid fa-user-plus me-2"></i>Create Account
+        </button>
+
+        <p class="text-center text-muted">
+          Already have an account?
+          <a href="{{ url_for('auth.login') }}" class="text-primary">Sign in</a>
+        </p>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

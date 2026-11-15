@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+{% block title %}Vulnerabilities{% endblock %}
+{% block breadcrumb %}Vulnerabilities{% endblock %}
+
+{% block content %}
+<div class="sf-page-header">
+  <div>
+    <h1 class="sf-page-title"><i class="fa-solid fa-bug me-2 text-danger"></i>Vulnerabilities</h1>
+    <p class="sf-page-subtitle">{{ vulns.total }} finding{{ 's' if vulns.total != 1 }}</p>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="sf-card mb-3">
+  <div class="sf-card-body">
+    <form method="GET" class="row g-2 align-items-end" id="filterForm">
+      <div class="col-md-3">
+        <input type="text" name="search" class="form-control sf-input" placeholder="🔍 Search title or CVE…"
+               value="{{ search }}">
+      </div>
+      <div class="col-md-2">
+        <select name="severity" class="form-select sf-select" onchange="this.form.submit()">
+          <option value="">All Severities</option>
+          <option value="critical" {% if severity == 'critical' %}selected{% endif %}>🔴 Critical</option>
+          <option value="high" {% if severity == 'high' %}selected{% endif %}>🟠 High</option>
+          <option value="medium" {% if severity == 'medium' %}selected{% endif %}>🟡 Medium</option>
+          <option value="low" {% if severity == 'low' %}selected{% endif %}>🔵 Low</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select name="scanner" class="form-select sf-select" onchange="this.form.submit()">
+          <option value="">All Scanners</option>
+          <option value="bandit" {% if scanner == 'bandit' %}selected{% endif %}>Bandit</option>
+          <option value="pip-audit" {% if scanner == 'pip-audit' %}selected{% endif %}>pip-audit</option>
+          <option value="gitleaks" {% if scanner == 'gitleaks' %}selected{% endif %}>Gitleaks</option>
+          <option value="trivy" {% if scanner == 'trivy' %}selected{% endif %}>Trivy</option>
+          <option value="sonarqube" {% if scanner == 'sonarqube' %}selected{% endif %}>SonarQube</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select name="repo_id" class="form-select sf-select" onchange="this.form.submit()">
+          <option value="">All Repos</option>
+          {% for repo in repos %}
+          <option value="{{ repo.id }}" {% if selected_repo == repo.id %}selected{% endif %}>{{ repo.name.split('/')[-1] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select name="status" class="form-select sf-select" onchange="this.form.submit()">
+          <option value="open" {% if status == 'open' %}selected{% endif %}>Open</option>
+          <option value="" {% if not status %}selected{% endif %}>All Statuses</option>
+          <option value="resolved" {% if status == 'resolved' %}selected{% endif %}>Resolved</option>
+          <option value="accepted" {% if status == 'accepted' %}selected{% endif %}>Accepted</option>
+        </select>
+      </div>
+      <div class="col-md-1">
+        <button type="submit" class="btn sf-btn-primary w-100"><i class="fa-solid fa-search"></i></button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="sf-card">
+  <div class="sf-card-body p-0">
+    {% if vulns.items %}
+    <div class="table-responsive">
+      <table class="sf-table table mb-0">
+        <thead>
+          <tr>
+            <th>Severity</th><th>Title</th><th>Scanner</th><th>CVE / Package</th>
+            <th>File:Line</th><th>Repository</th><th>Status</th><th>Date</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in vulns.items %}
+          <tr class="sf-clickable-row" data-href="{{ url_for('vulnerabilities.detail', vuln_id=v.id) }}">
+            <td>
+              <span class="sf-severity-badge sf-sev-{{ v.severity }}">
+                <i class="fa-solid {{ v.severity_icon }} me-1"></i>{{ v.severity }}
+              </span>
+            </td>
+            <td>
+              <div class="text-truncate fw-semibold" style="max-width:250px" title="{{ v.title }}">{{ v.title }}</div>
+              {% if v.package_name %}
+              <small class="text-muted">{{ v.package_name }} {{ v.installed_version or '' }}</small>
+              {% endif %}
+            </td>
+            <td><span class="badge bg-secondary">{{ v.scanner }}</span></td>
+            <td>
+              {% if v.cve_id %}
+              <a href="https://nvd.nist.gov/vuln/detail/{{ v.cve_id }}" target="_blank"
+                 class="text-info small" onclick="event.stopPropagation()">{{ v.cve_id }}</a>
+              {% elif v.vuln_type %}
+              <span class="text-muted small font-monospace">{{ v.vuln_type }}</span>
+              {% else %}—{% endif %}
+            </td>
+            <td><small class="text-muted font-monospace">{{ v.file_display }}</small></td>
+            <td><small class="text-muted">{{ v.repository.name.split('/')[-1] if v.repository else '—' }}</small></td>
+            <td>
+              <span class="badge bg-{{ 'success' if v.status == 'resolved' else 'info' if v.status == 'accepted' else 'secondary' if v.status == 'false_positive' else 'danger' }}">
+                {{ v.status.replace('_', ' ') }}
+              </span>
+            </td>
+            <td><small>{{ v.created_at.strftime('%b %d') if v.created_at else '—' }}</small></td>
+            <td>
+              <a href="{{ url_for('vulnerabilities.detail', vuln_id=v.id) }}"
+                 class="btn btn-xs btn-outline-secondary" onclick="event.stopPropagation()">
+                <i class="fa-solid fa-eye"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if vulns.pages > 1 %}
+    <div class="d-flex justify-content-center py-3">
+      <nav>
+        <ul class="pagination pagination-sm mb-0">
+          {% if vulns.has_prev %}<li class="page-item"><a class="page-link" href="?page={{ vulns.prev_num }}&severity={{ severity }}&scanner={{ scanner }}&status={{ status }}">‹</a></li>{% endif %}
+          <li class="page-item active"><a class="page-link">{{ vulns.page }}/{{ vulns.pages }}</a></li>
+          {% if vulns.has_next %}<li class="page-item"><a class="page-link" href="?page={{ vulns.next_num }}&severity={{ severity }}&scanner={{ scanner }}&status={{ status }}">›</a></li>{% endif %}
+        </ul>
+      </nav>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="sf-empty-state py-5">
+      <i class="fa-solid fa-shield-halved fa-3x text-success mb-3"></i>
+      <h4>No vulnerabilities found</h4>
+      <p class="text-muted">{{ 'Try adjusting your filters.' if (search or severity or scanner) else 'Run a scan to detect security issues.' }}</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
